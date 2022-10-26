@@ -12,11 +12,11 @@ namespace SecureNote
         private readonly TcpClient _client;
         private readonly SecureStream _stream;
         //private readonly Task _task;
-        public SecureNoteClient(string address, int port, RSA rsa)
+        public SecureNoteClient(string address, int port)
         {
             _client = new TcpClient(address, port);
             _stream = new SecureStream(_client.GetStream());
-            _stream.HandshakeAsClientAsync(rsa).GetAwaiter().GetResult();
+            _stream.HandshakeAsClientAsync().GetAwaiter().GetResult();
             //_task = RunMainLoop();
         }
         //private async Task RunMainLoop()

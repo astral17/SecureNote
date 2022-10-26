@@ -6,6 +6,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
+using ProtoBuf;
+using System.Runtime.Versioning;
 
 namespace SecureNote
 {
@@ -23,94 +25,105 @@ namespace SecureNote
             _stream = stream;
             _leaveStreamOpen = leaveStreamOpen;
         }
+        [ProtoContract]
+        private struct HandshakeDataFromServer
+        {
+            [ProtoMember(1)]
+            public byte[] serverPubKey;
+            //[ProtoMember(2)]
+            //public byte[] signPubKey;
+            //[ProtoMember(3)]
+            //public byte[] signedText;
+        }
+        [ProtoContract]
+        private struct HandshakeDataFromClient
+        {
+            [ProtoMember(1)]
+            public byte[] clientPubKey;
+            //[ProtoMember(2)]
+            //public byte[] textToSign;
+        }
+        [SupportedOSPlatform("windows")]
         public async Task<bool> HandshakeAsServerAsync()
         {
             Console.WriteLine("HandshakeAsServerAsync");
-            int action = await RawReadIntAsync();
-            if (action == HandshakeNewSession)
+            // TODO: Cross platform ecdh
+            using (ECDiffieHellmanCng ecdh = new ECDiffieHellmanCng())
             {
-                Console.WriteLine("NewSession");
-                int length = await RawReadIntAsync();
-                RSA rsa = RSA.Create();
-                byte[] buffer = await RawReadExactlyAsync(length);
-                rsa.ImportRSAPublicKey(buffer, out int _);
-                Console.WriteLine("RSA public:\n{0}\n", Convert.ToHexString(buffer));
-                byte[] secret = new byte[64];
+                ecdh.KeyDerivationFunction = ECDiffieHellmanKeyDerivationFunction.Hash;
+                ecdh.HashAlgorithm = CngAlgorithm.Sha512;
+                var request = new HandshakeDataFromServer
+                {
+                    serverPubKey = ecdh.PublicKey.ToByteArray(),
+                };
+                Serializer.SerializeWithLengthPrefix(_stream, request, PrefixStyle.Fixed32);
+                byte[] emptyByteArray = new byte[0];
+                await _stream.ReadAsync(emptyByteArray, 0, 0);
+                var response = Serializer.DeserializeWithLengthPrefix<HandshakeDataFromClient>(_stream, PrefixStyle.Fixed32);
+                var secret = ecdh.DeriveKeyMaterial(CngKey.Import(response.clientPubKey, CngKeyBlobFormat.EccPublicBlob));
+                if (secret == null)
+                    return false;
                 Aes inputAes = Aes.Create();
                 Aes outputAes = Aes.Create();
                 inputAes.Padding = outputAes.Padding = PaddingMode.None;
-                outputAes.Key = inputAes.Key;
+                byte[] key = new byte[32];
+                byte[] iv = new byte[16];
+                Buffer.BlockCopy(secret, 0, key, 0, 32);
+                inputAes.Key = outputAes.Key = key;
+                Buffer.BlockCopy(secret, 32, iv, 0, 16);
+                inputAes.IV = iv;
+                Buffer.BlockCopy(secret, 48, iv, 0, 16);
+                outputAes.IV = iv;
                 Console.WriteLine("inputKey:\n{0}\n", Convert.ToHexString(inputAes.Key));
                 Console.WriteLine("inputIV:\n{0}\n", Convert.ToHexString(inputAes.IV));
                 Console.WriteLine("outputKey:\n{0}\n", Convert.ToHexString(outputAes.Key));
                 Console.WriteLine("outputIV:\n{0}\n", Convert.ToHexString(outputAes.IV));
-                Buffer.BlockCopy(inputAes.Key, 0, secret, 0, 32);
-                Buffer.BlockCopy(inputAes.IV, 0, secret, 32, 16);
-                Buffer.BlockCopy(outputAes.IV, 0, secret, 48, 16);
                 _readCrypto = new CryptoStream(new ZeroStream(), inputAes.CreateEncryptor(), CryptoStreamMode.Read);
                 _writeCrypto = new CryptoStream(new ZeroStream(), outputAes.CreateEncryptor(), CryptoStreamMode.Read);
                 Console.WriteLine("Secret:\n{0}\n", Convert.ToHexString(secret));
-                byte[] encrypted = rsa.Encrypt(secret, RSAEncryptionPadding.Pkcs1);
-                
-                MemoryStream memory = new MemoryStream();
-                using (BinaryWriter bw = new BinaryWriter(memory))
-                {
-                    bw.Write(encrypted.Length);
-                    bw.Write(encrypted);
-                }
-                buffer = memory.ToArray();
-                await _stream.WriteAsync(buffer, 0, buffer.Length);
-                return true;
             }
-            if (action == HandshakeLoadSession)
-            {
-                throw new NotImplementedException("TODO: Load session");
-            }
-            return false;
+            return true;
         }
 
-        public async Task<bool> HandshakeAsClientAsync(RSA rsa)
+        [SupportedOSPlatform("windows")]
+        public async Task<bool> HandshakeAsClientAsync()
         {
             Console.WriteLine("HandshakeAsClientAsync");
-            MemoryStream memory = new MemoryStream();
-            using (BinaryWriter bw = new BinaryWriter(memory))
+            // TODO: Cross platform ecdh
+            using (ECDiffieHellmanCng ecdh = new ECDiffieHellmanCng())
             {
-                byte[] pubKey = rsa.ExportRSAPublicKey();
-                Console.WriteLine("RSA public:\n{0}\n", Convert.ToHexString(pubKey));
-                bw.Write(HandshakeNewSession);
-                bw.Write(pubKey.Length);
-                bw.Write(pubKey);
+                ecdh.KeyDerivationFunction = ECDiffieHellmanKeyDerivationFunction.Hash;
+                ecdh.HashAlgorithm = CngAlgorithm.Sha512;
+                var request = new HandshakeDataFromClient
+                {
+                    clientPubKey = ecdh.PublicKey.ToByteArray(),
+                };
+                Serializer.SerializeWithLengthPrefix(_stream, request, PrefixStyle.Fixed32);
+                byte[] emptyByteArray = new byte[0];
+                await _stream.ReadAsync(emptyByteArray, 0, 0);
+                var response = Serializer.DeserializeWithLengthPrefix<HandshakeDataFromServer>(_stream, PrefixStyle.Fixed32);
+                var secret = ecdh.DeriveKeyMaterial(CngKey.Import(response.serverPubKey, CngKeyBlobFormat.EccPublicBlob));
+                if (secret == null)
+                    return false;
+                Aes inputAes = Aes.Create();
+                Aes outputAes = Aes.Create();
+                inputAes.Padding = outputAes.Padding = PaddingMode.None;
+                byte[] key = new byte[32];
+                byte[] iv = new byte[16];
+                Buffer.BlockCopy(secret, 0, key, 0, 32);
+                inputAes.Key = outputAes.Key = key;
+                Buffer.BlockCopy(secret, 32, iv, 0, 16);
+                outputAes.IV = iv;
+                Buffer.BlockCopy(secret, 48, iv, 0, 16);
+                inputAes.IV = iv;
+                Console.WriteLine("inputKey:\n{0}\n", Convert.ToHexString(inputAes.Key));
+                Console.WriteLine("inputIV:\n{0}\n", Convert.ToHexString(inputAes.IV));
+                Console.WriteLine("outputKey:\n{0}\n", Convert.ToHexString(outputAes.Key));
+                Console.WriteLine("outputIV:\n{0}\n", Convert.ToHexString(outputAes.IV));
+                _readCrypto = new CryptoStream(new ZeroStream(), inputAes.CreateEncryptor(), CryptoStreamMode.Read);
+                _writeCrypto = new CryptoStream(new ZeroStream(), outputAes.CreateEncryptor(), CryptoStreamMode.Read);
+                Console.WriteLine("Secret:\n{0}\n", Convert.ToHexString(secret));
             }
-            byte[] buffer = memory.ToArray();
-            await _stream.WriteAsync(buffer, 0, buffer.Length);
-
-            int length = await RawReadIntAsync();
-            buffer = await RawReadExactlyAsync(length);
-            buffer = rsa.Decrypt(buffer, RSAEncryptionPadding.Pkcs1);
-            Console.WriteLine("Secret:\n{0}\n", Convert.ToHexString(buffer));
-            if (buffer.Length != 64)
-                return false;
-            Aes inputAes = Aes.Create();
-            Aes outputAes = Aes.Create();
-            inputAes.Padding = outputAes.Padding = PaddingMode.None;
-            byte[] key = new byte[32];
-            byte[] iv = new byte[16];
-            Buffer.BlockCopy(buffer, 0, key, 0, 32);
-            inputAes.Key = outputAes.Key = key;
-            Buffer.BlockCopy(buffer, 32, iv, 0, 16);
-            outputAes.IV = iv;
-            Buffer.BlockCopy(buffer, 48, iv, 0, 16);
-            inputAes.IV = iv;
-            //Buffer.BlockCopy(buffer, 0, inputAes.Key, 0, 32);
-            //Buffer.BlockCopy(buffer, 0, outputAes.Key, 0, 32);
-            //Buffer.BlockCopy(buffer, 32, outputAes.IV, 0, 16);
-            //Buffer.BlockCopy(buffer, 48, inputAes.IV, 0, 16);
-            Console.WriteLine("inputKey:\n{0}\n", Convert.ToHexString(inputAes.Key));
-            Console.WriteLine("inputIV:\n{0}\n", Convert.ToHexString(inputAes.IV));
-            Console.WriteLine("outputKey:\n{0}\n", Convert.ToHexString(outputAes.Key));
-            Console.WriteLine("outputIV:\n{0}\n", Convert.ToHexString(outputAes.IV));
-            _readCrypto = new CryptoStream(new ZeroStream(), inputAes.CreateEncryptor(), CryptoStreamMode.Read);
-            _writeCrypto = new CryptoStream(new ZeroStream(), outputAes.CreateEncryptor(), CryptoStreamMode.Read);
             return true;
         }
 

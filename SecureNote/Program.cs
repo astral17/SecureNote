@@ -171,7 +171,6 @@ namespace SecureNote
             }
             new SecureNoteServer(address, port).ListenAsync().GetAwaiter().GetResult();
         }
-        private static RSA? _rsa = null;
         private static SecureNoteClient _client;
         private static void ConnectFunc(string[] obj)
         {
@@ -188,8 +187,7 @@ namespace SecureNote
                 Console.WriteLine("port should be a number!");
                 return;
             }
-            _rsa ??= RSA.Create();
-            _client = new SecureNoteClient(address, port, _rsa);
+            _client = new SecureNoteClient(address, port);
         }
 
         public static void SignUpFunc(string[] args)
@@ -239,74 +237,6 @@ namespace SecureNote
             foreach (var file in files)
                 Console.WriteLine(file);
         }
-
-        //public static void GenRsaFunc(string[] args)
-        //{
-        //    var pass = string.Empty;
-        //    ConsoleKey key;
-        //    Console.Write("Pass: ");
-        //    do
-        //    {
-        //        var keyInfo = Console.ReadKey(intercept: true);
-        //        key = keyInfo.Key;
-
-        //        if (key == ConsoleKey.Backspace && pass.Length > 0)
-        //        {
-        //            Console.Write("\b \b");
-        //            pass = pass[0..^1];
-        //        }
-        //        else if (!char.IsControl(keyInfo.KeyChar))
-        //        {
-        //            Console.Write("*");
-        //            pass += keyInfo.KeyChar;
-        //        }
-        //    } while (key != ConsoleKey.Enter);
-        //    Console.WriteLine(pass);
-        //    _rsa = RSA.Create();
-        //    byte[] prvKey = _rsa.ExportRSAPrivateKey();
-        //    //File.WriteAllBytes("rsa.key", );
-        //    Aes aes = Aes.Create();
-        //    SHA256 sha256 = SHA256.Create();
-        //    aes.Key = sha256.ComputeHash(Encoding.UTF8.GetBytes(pass));
-
-        //    SHA1 sha1 = SHA1.Create();
-        //    aes.IV = sha1.ComputeHash(Encoding.UTF8.GetBytes(pass));
-
-        //    aes.Enc
-        //    //ae
-        //    //sha256.ComputeHash();
-        //    //_rsa.ex
-        //}
-        //public static void LoadRsaFunc(string[] args)
-        //{
-        //    if (!File.Exists("rsa.key"))
-        //    {
-        //        Console.WriteLine("File with key not found");
-        //        return;
-        //    }
-        //    var pass = string.Empty;
-        //    ConsoleKey key;
-        //    Console.Write("Pass: ");
-        //    do
-        //    {
-        //        var keyInfo = Console.ReadKey(intercept: true);
-        //        key = keyInfo.Key;
-
-        //        if (key == ConsoleKey.Backspace && pass.Length > 0)
-        //        {
-        //            Console.Write("\b \b");
-        //            pass = pass[0..^1];
-        //        }
-        //        else if (!char.IsControl(keyInfo.KeyChar))
-        //        {
-        //            Console.Write("*");
-        //            pass += keyInfo.KeyChar;
-        //        }
-        //    } while (key != ConsoleKey.Enter);
-        //    Console.WriteLine(pass);
-        //    _rsa = RSA.Create();
-        //    _rsa.ImportRSAPrivateKey(File.ReadAllBytes("rsa.key"), out int _);
-        //}
 
         public static void HelpFunc(string[] args)
         {
