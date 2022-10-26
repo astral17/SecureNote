@@ -8,9 +8,54 @@ using System.Threading.Tasks;
 using System.Threading.Channels;
 using System.Buffers.Binary;
 using System.IO.Enumeration;
+using ProtoBuf;
+using System.IO;
 
 namespace SecureNote
 {
+    public enum SecureNoteActions : int
+    {
+        Ping,
+        SignUp,
+        SignIn,
+        FileList,
+        FileDownload,
+        FileUpload,
+        FileRename,
+        FileDelete,
+    }
+    [ProtoContract]
+    public struct SecureNoteFileListResponse
+    {
+        [ProtoMember(1)]
+        public string[] files;
+    }
+    [ProtoContract]
+    public struct SecureNoteFileDownloadRequest
+    {
+        [ProtoMember(1)]
+        public string filename;
+    }
+    [ProtoContract]
+    public struct SecureNoteFileDownloadResponse
+    {
+        [ProtoMember(1)]
+        public byte[] file;
+    }
+
+    [ProtoContract]
+    public struct SecureNoteFileUploadRequest
+    {
+        [ProtoMember(1)]
+        public string filename;
+        [ProtoMember(2)]
+        public byte[] file;
+    }
+    //[ProtoContract]
+    //public struct SecureNoteFileUploadResponse
+    //{
+    //}
+
     public class SecureNoteServer
     {
         private readonly TcpListener _listener;
@@ -27,7 +72,7 @@ namespace SecureNote
 
                 while (true)
                 {
-                    Console.WriteLine("Ожидание подключений...");
+                    Console.WriteLine("Connections wait...");
                     TcpClient client = await _listener.AcceptTcpClientAsync();
                     lock (_connections)
                         _connections.Add(new SecureNoteConnection(client));
@@ -48,7 +93,7 @@ namespace SecureNote
         {
             _stream = new SecureStream(client.GetStream());
             _endPoint = client.Client.RemoteEndPoint?.ToString() ?? "NULL";
-            Console.WriteLine($"Подключен клиент: {_endPoint}");
+            Console.WriteLine($"Client connected: {_endPoint}");
             _task = RunMainLoop();
         }
 
@@ -58,19 +103,11 @@ namespace SecureNote
             try
             {
                 await _stream.HandshakeAsServerAsync();
-                byte[] headerBuffer = new byte[4];
-                int received = 0;
-                //int received = await _stream.ReadAsync(headerBuffer, 0, 4);
-                //if (received != 4)
-                //    throw new NotSupportedException("Unknown header");
+                byte[] emptyByteArray = new byte[0];
                 while (true)
                 {
-                    received = await _stream.ReadAsync(headerBuffer, 0, 4);
-                    if (received != 4)
-                        break;
-                    string action = Encoding.UTF8.GetString(headerBuffer);
-                    //int length = BinaryPrimitives.ReadInt32LittleEndian(headerBuffer);
-                    //Console.WriteLine($"{_endPoint}: Got {length}");
+                    await _stream.ReadAsync(emptyByteArray, 0, 0);
+                    var action = Serializer.DeserializeWithLengthPrefix<SecureNoteActions>(_stream, PrefixStyle.Fixed32);
                     switch (action)
                     {
                         //case "ping":
@@ -101,57 +138,53 @@ namespace SecureNote
                         //    {
                         //        break;
                         //    }
-                        case "snfl": // List
+                        case SecureNoteActions.FileList: // List
                             {
+                                if (!Directory.Exists("storage"))
+                                    Directory.CreateDirectory("storage");
+                                var response = new SecureNoteFileListResponse
+                                {
+                                    files = Directory.GetFiles("storage"),
+                                };
+                                for (int i = 0; i < response.files.Length; i++)
+                                    response.files[i] = Path.GetFileName(response.files[i]);
+                                using (var ms = new MemoryStream())
+                                {
+                                    Serializer.SerializeWithLengthPrefix(ms, response, PrefixStyle.Fixed32);
+                                    await _stream.WriteAsync(ms.GetBuffer(), 0, (int)ms.Position);
+                                }
+                                break;
+                            }
+                        case SecureNoteActions.FileDownload:
+                            {
+                                await _stream.ReadAsync(emptyByteArray, 0, 0);
+                                var request = Serializer.DeserializeWithLengthPrefix<SecureNoteFileDownloadRequest>(_stream, PrefixStyle.Fixed32);
+
+                                Console.WriteLine($"{_endPoint}: Downloading {request.filename}");
                                 MemoryStream memory = new MemoryStream();
                                 if (!Directory.Exists("storage"))
                                     Directory.CreateDirectory("storage");
-                                var list = Directory.GetFiles("storage");
-                                byte[] buffer;
-                                using (BinaryWriter bw = new BinaryWriter(memory))
+                                if (!File.Exists("storage/" + request.filename))
+                                    File.Create("storage/" + request.filename).Close();
+                                var response = new SecureNoteFileDownloadResponse
                                 {
-                                    bw.Write(list.Length);
-                                    foreach (var file in list)
-                                    {
-                                        buffer = Encoding.UTF8.GetBytes(Path.GetFileName(file).PadRight(32, '\x0'));
-                                        bw.Write(buffer, 0, 32);
-                                    }
+                                    file = await File.ReadAllBytesAsync("storage/" + request.filename),
+                                };
+                                using (var ms = new MemoryStream())
+                                {
+                                    Serializer.SerializeWithLengthPrefix(ms, response, PrefixStyle.Fixed32);
+                                    await _stream.WriteAsync(ms.GetBuffer(), 0, (int)ms.Position);
                                 }
-                                buffer = memory.ToArray();
-                                await _stream.WriteAsync(buffer, 0, buffer.Length);
                                 break;
                             }
-                        case "snfd": // Download
+                        case SecureNoteActions.FileUpload: // Upload
                             {
-                                byte[] buffer = await ReadAsync(32);
-                                string filename = Encoding.UTF8.GetString(buffer, 0, 32).TrimEnd('\x0');
-                                Console.WriteLine($"{_endPoint}: Downloading {filename}");
-                                MemoryStream memory = new MemoryStream();
-                                using (BinaryWriter bw = new BinaryWriter(memory))
-                                {
-                                    if (!Directory.Exists("storage"))
-                                        Directory.CreateDirectory("storage");
-                                    filename = "storage/" + filename;
-                                    if (!File.Exists(filename))
-                                        File.Create(filename).Close();
-                                    byte[] fileBytes = await File.ReadAllBytesAsync(filename);
-                                    bw.Write(fileBytes.Length);
-                                    bw.Write(fileBytes);
-                                }
-                                buffer = memory.ToArray();
-                                await _stream.WriteAsync(buffer, 0, buffer.Length);
-                                break;
-                            }
-                        case "snfu": // Upload
-                            {
-                                byte[] buffer = await ReadAsync(32);
-                                string filename = Encoding.UTF8.GetString(buffer, 0, 32).TrimEnd('\x0');
-                                Console.WriteLine($"{_endPoint}: Uploading {filename}");
+                                await _stream.ReadAsync(emptyByteArray, 0, 0);
+                                var request = Serializer.DeserializeWithLengthPrefix<SecureNoteFileUploadRequest>(_stream, PrefixStyle.Fixed32);
+                                Console.WriteLine($"{_endPoint}: Uploading {request.filename}");
                                 if (!Directory.Exists("storage"))
                                     Directory.CreateDirectory("storage");
-                                filename = "storage/" + filename;
-                                int length = BinaryPrimitives.ReadInt32LittleEndian(await ReadAsync(4));
-                                File.WriteAllBytes(filename, await ReadAsync(length));
+                                File.WriteAllBytes("storage/" + request.filename, request.file);
                                 break;
                             }
                         //case "snfr": // Rename

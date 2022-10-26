@@ -2,6 +2,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
+using ProtoBuf;
 
 namespace SecureNote
 {
@@ -64,9 +65,37 @@ namespace SecureNote
         //    Console.ReadKey(true);
         //}
 
-
+        //private enum TmpActions : uint
+        //{
+        //    none = 0,
+        //    help = 14,
+        //    test = 15,
+        //    good,
+        //}
         public static void Main(string[] args)
         {
+            //using (var ms = new MemoryStream())
+            //{
+            //    SecureNoteFileListResponse data = new();
+            //    data.files = new string[] { "hello", "world" };
+            //    //Serializer.Serialize(ms, data);
+            //    //Serializer.Serialize(ms, data);
+            //    Serializer.SerializeWithLengthPrefix(ms, data, PrefixStyle.Fixed32);
+            //    Serializer.SerializeWithLengthPrefix(ms, data, PrefixStyle.Fixed32);
+            //    //ms.WriteByte(8);
+            //    //ms.WriteByte(143);
+            //    //ms.WriteByte(78);
+            //    ms.Position = 0;
+            //    //var result = Serializer.Deserialize<SecureNoteFileListData>(ms);
+            //    var result1 = Serializer.DeserializeWithLengthPrefix<SecureNoteFileListResponse>(ms, PrefixStyle.Fixed32);
+            //    var result = Serializer.DeserializeWithLengthPrefix<SecureNoteFileListResponse>(ms, PrefixStyle.Fixed32);
+            //    foreach (var file in result.files)
+            //        Console.WriteLine(file);
+            //    byte[] bytes = ms.ToArray();
+            //    foreach (var b in bytes)
+            //        Console.Write($"{b} ");
+            //}
+            //return;
             //FileInfo exceptionsFile = new FileInfo("log.txt");
             //TextWriter exceptionWriter = new StreamWriter(exceptionsFile.FullName);
             //Console.SetError(exceptionWriter);

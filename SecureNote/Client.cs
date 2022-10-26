@@ -3,6 +3,7 @@ using System.Text;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System;
+using ProtoBuf;
 
 namespace SecureNote
 {
@@ -42,37 +43,36 @@ namespace SecureNote
 
         public async Task<string[]> GetFiles()
         {
-            await SendAsync("snfl");
-            int count = BinaryPrimitives.ReadInt32LittleEndian(await ReadAsync(4));
-            string[] result = new string[count];
-            for (int i = 0; i < count; i++)
-                result[i] = Encoding.UTF8.GetString(await ReadAsync(32), 0, 32).TrimEnd('\x0');
-            return result;
+            Serializer.SerializeWithLengthPrefix(_stream, SecureNoteActions.FileList, PrefixStyle.Fixed32);
+            byte[] emptyByteArray = new byte[0];
+            await _stream.ReadAsync(emptyByteArray, 0, 0);
+            var response = Serializer.DeserializeWithLengthPrefix<SecureNoteFileListResponse>(_stream, PrefixStyle.Fixed32);
+            return response.files;
         }
         public async Task DownloadFile(string filename)
         {
-            if (filename.Length > 32)
-                filename = filename.Substring(0, 32);
-            await SendAsync("snfd" + filename.PadRight(32, '\x0'));
-            int length = BinaryPrimitives.ReadInt32LittleEndian(await ReadAsync(4));
+            var request = new SecureNoteFileDownloadRequest
+            {
+                filename = filename,
+            };
+            Serializer.SerializeWithLengthPrefix(_stream, SecureNoteActions.FileDownload, PrefixStyle.Fixed32);
+            Serializer.SerializeWithLengthPrefix(_stream, request, PrefixStyle.Fixed32);
+            byte[] emptyByteArray = new byte[0];
+            await _stream.ReadAsync(emptyByteArray, 0, 0);
+            var response = Serializer.DeserializeWithLengthPrefix<SecureNoteFileDownloadResponse>(_stream, PrefixStyle.Fixed32);
             if (!Directory.Exists("workspace"))
                 Directory.CreateDirectory("workspace");
-            File.WriteAllBytes("workspace/" + filename, await ReadAsync(length));
+            File.WriteAllBytes("workspace/" + filename, response.file);
         }
         public async Task UploadFile(string filename)
         {
-            if (filename.Length > 32)
-                filename = filename.Substring(0, 32);
-            await SendAsync("snfu" + filename.PadRight(32, '\x0'));
-            MemoryStream memory = new MemoryStream();
-            using (BinaryWriter bw = new BinaryWriter(memory))
+            var request = new SecureNoteFileUploadRequest
             {
-                byte[] fileBytes = await File.ReadAllBytesAsync("workspace/" + filename);
-                bw.Write(fileBytes.Length);
-                bw.Write(fileBytes);
-            }
-            byte[] buffer = memory.ToArray();
-            await _stream.WriteAsync(buffer, 0, buffer.Length);
+                filename = filename,
+                file = await File.ReadAllBytesAsync("workspace/" + filename),
+            };
+            Serializer.SerializeWithLengthPrefix(_stream, SecureNoteActions.FileUpload, PrefixStyle.Fixed32);
+            Serializer.SerializeWithLengthPrefix(_stream, request, PrefixStyle.Fixed32);
         }
         public async Task<byte[]> ReadAsync(int length)
         {
