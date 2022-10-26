@@ -41,12 +41,42 @@ namespace SecureNote
             await _stream.WriteAsync(buffer, 0, buffer.Length);
         }
 
+        public async Task<bool> SignUp(string username, string password)
+        {
+            Serializer.SerializeWithLengthPrefix(_stream, SecureNoteActions.SignUp, PrefixStyle.Fixed32);
+            var request = new SecureNoteSignInRequest
+            {
+                username = username,
+                password = password,
+            };
+            Serializer.SerializeWithLengthPrefix(_stream, request, PrefixStyle.Fixed32);
+            byte[] emptyByteArray = new byte[0];
+            await _stream.ReadAsync(emptyByteArray, 0, 0);
+            var response = Serializer.DeserializeWithLengthPrefix<SecureNoteSignUpResponse>(_stream, PrefixStyle.Fixed32);
+            return response.success;
+        }
+        public async Task<bool> SignIn(string username, string password)
+        {
+            Serializer.SerializeWithLengthPrefix(_stream, SecureNoteActions.SignIn, PrefixStyle.Fixed32);
+            var request = new SecureNoteSignInRequest
+            {
+                username = username,
+                password = password,
+            };
+            Serializer.SerializeWithLengthPrefix(_stream, request, PrefixStyle.Fixed32);
+            byte[] emptyByteArray = new byte[0];
+            await _stream.ReadAsync(emptyByteArray, 0, 0);
+            var response = Serializer.DeserializeWithLengthPrefix<SecureNoteSignInResponse>(_stream, PrefixStyle.Fixed32);
+            return response.success;
+        }
+
         public async Task<string[]> GetFiles()
         {
             Serializer.SerializeWithLengthPrefix(_stream, SecureNoteActions.FileList, PrefixStyle.Fixed32);
             byte[] emptyByteArray = new byte[0];
             await _stream.ReadAsync(emptyByteArray, 0, 0);
             var response = Serializer.DeserializeWithLengthPrefix<SecureNoteFileListResponse>(_stream, PrefixStyle.Fixed32);
+            response.files ??= new string[0];
             return response.files;
         }
         public async Task DownloadFile(string filename)

@@ -15,7 +15,6 @@ namespace SecureNote
 {
     public enum SecureNoteActions : int
     {
-        Ping,
         SignUp,
         SignIn,
         FileList,
@@ -24,10 +23,43 @@ namespace SecureNote
         FileRename,
         FileDelete,
     }
+
+    [ProtoContract]
+    public struct SecureNoteSignUpRequest
+    {
+        [ProtoMember(1)]
+        public string username;
+        [ProtoMember(2)]
+        public string password;
+    }
+    [ProtoContract]
+    public struct SecureNoteSignUpResponse
+    {
+        [ProtoMember(1)]
+        public bool success;
+    }
+
+    [ProtoContract]
+    public struct SecureNoteSignInRequest
+    {
+        [ProtoMember(1)]
+        public string username;
+        [ProtoMember(2)]
+        public string password;
+    }
+    [ProtoContract]
+    public struct SecureNoteSignInResponse
+    {
+        [ProtoMember(1)]
+        public bool success;
+    }
+
     [ProtoContract]
     public struct SecureNoteFileListResponse
     {
         [ProtoMember(1)]
+        public bool success;
+        [ProtoMember(2)]
         public string[] files;
     }
     [ProtoContract]
@@ -40,6 +72,8 @@ namespace SecureNote
     public struct SecureNoteFileDownloadResponse
     {
         [ProtoMember(1)]
+        public bool success;
+        [ProtoMember(2)]
         public byte[] file;
     }
 
@@ -51,15 +85,18 @@ namespace SecureNote
         [ProtoMember(2)]
         public byte[] file;
     }
-    //[ProtoContract]
-    //public struct SecureNoteFileUploadResponse
-    //{
-    //}
+    [ProtoContract]
+    public struct SecureNoteFileUploadResponse
+    {
+        [ProtoMember(1)]
+        public bool success;
+    }
 
     public class SecureNoteServer
     {
         private readonly TcpListener _listener;
         private readonly HashSet<SecureNoteConnection> _connections = new();
+        private readonly AuthService _authService = new AuthService("users.json");
         public SecureNoteServer(string address, int port)
         {
             _listener = new TcpListener(IPAddress.Parse(address), port);
@@ -75,7 +112,7 @@ namespace SecureNote
                     Console.WriteLine("Connections wait...");
                     TcpClient client = await _listener.AcceptTcpClientAsync();
                     lock (_connections)
-                        _connections.Add(new SecureNoteConnection(client));
+                        _connections.Add(new SecureNoteConnection(client, _authService));
                 }
             }
             catch (Exception e)
@@ -89,10 +126,13 @@ namespace SecureNote
         private readonly string _endPoint;
         private readonly SecureStream _stream;
         private readonly Task _task;
-        public SecureNoteConnection(TcpClient client)
+        private string? _username = null;
+        private AuthService _authService;
+        public SecureNoteConnection(TcpClient client, AuthService authService)
         {
             _stream = new SecureStream(client.GetStream());
             _endPoint = client.Client.RemoteEndPoint?.ToString() ?? "NULL";
+            _authService = authService;
             Console.WriteLine($"Client connected: {_endPoint}");
             _task = RunMainLoop();
         }
@@ -110,44 +150,56 @@ namespace SecureNote
                     var action = Serializer.DeserializeWithLengthPrefix<SecureNoteActions>(_stream, PrefixStyle.Fixed32);
                     switch (action)
                     {
-                        //case "ping":
-                        //    {
-                        //        await SendTextAsync("pong");
-                        //        break;
-                        //    }
-                        //case "snau":
-                        //    {
-                        //        byte[] buffer = new byte[64];
-                        //        do
-                        //        {
-                        //            received += await _stream.ReadAsync(buffer, received, buffer.Length - received);
-                        //        } while (received < buffer.Length);
-                        //        if (received != 64)
-                        //            throw new NotSupportedException("auth wrong length");
-                        //        string login = Encoding.UTF8.GetString(buffer, 0, 32).TrimEnd('\x0');
-                        //        string password = Encoding.UTF8.GetString(buffer, 32, 32).TrimEnd('\x0');
-                        //        if (login == "admin" && password == "admin")
-                        //        {
-                        //            MemoryStream memory = new MemoryStream(buffer);
-                        //            memory.Write("123");
-                        //            _stream.WriteAsync(buffer,)
-                        //        }
-                        //        break;
-                        //    }
-                        //case "snre":
-                        //    {
-                        //        break;
-                        //    }
-                        case SecureNoteActions.FileList: // List
+                        case SecureNoteActions.SignUp:
                             {
-                                if (!Directory.Exists("storage"))
-                                    Directory.CreateDirectory("storage");
+                                await _stream.ReadAsync(emptyByteArray, 0, 0);
+                                var request = Serializer.DeserializeWithLengthPrefix<SecureNoteSignInRequest>(_stream, PrefixStyle.Fixed32);
+                                var response = new SecureNoteSignInResponse
+                                {
+                                    success = _authService.CreateUser(request.username, request.password),
+                                };
+                                if (response.success)
+                                    _username = request.username;
+                                using (var ms = new MemoryStream())
+                                {
+                                    Serializer.SerializeWithLengthPrefix(ms, response, PrefixStyle.Fixed32);
+                                    await _stream.WriteAsync(ms.GetBuffer(), 0, (int)ms.Position);
+                                }
+                                break;
+                            }
+                        case SecureNoteActions.SignIn:
+                            {
+                                await _stream.ReadAsync(emptyByteArray, 0, 0);
+                                var request = Serializer.DeserializeWithLengthPrefix<SecureNoteSignInRequest>(_stream, PrefixStyle.Fixed32);
+                                var response = new SecureNoteSignInResponse
+                                {
+                                    success = _authService.CheckUser(request.username, request.password),
+                                };
+                                if (response.success)
+                                    _username = request.username;
+                                using (var ms = new MemoryStream())
+                                {
+                                    Serializer.SerializeWithLengthPrefix(ms, response, PrefixStyle.Fixed32);
+                                    await _stream.WriteAsync(ms.GetBuffer(), 0, (int)ms.Position);
+                                }
+                                break;
+                            }
+                        case SecureNoteActions.FileList:
+                            {
                                 var response = new SecureNoteFileListResponse
                                 {
-                                    files = Directory.GetFiles("storage"),
+                                    success = _username != null,
+                                    files = null!,
                                 };
-                                for (int i = 0; i < response.files.Length; i++)
-                                    response.files[i] = Path.GetFileName(response.files[i]);
+                                string path = "storage/" + _username + "/";
+                                if (response.success)
+                                {
+                                    if (!Directory.Exists(path))
+                                        Directory.CreateDirectory(path);
+                                    response.files = Directory.GetFiles(path);
+                                    for (int i = 0; i < response.files.Length; i++)
+                                        response.files[i] = Path.GetFileName(response.files[i]);
+                                }
                                 using (var ms = new MemoryStream())
                                 {
                                     Serializer.SerializeWithLengthPrefix(ms, response, PrefixStyle.Fixed32);
@@ -160,16 +212,21 @@ namespace SecureNote
                                 await _stream.ReadAsync(emptyByteArray, 0, 0);
                                 var request = Serializer.DeserializeWithLengthPrefix<SecureNoteFileDownloadRequest>(_stream, PrefixStyle.Fixed32);
 
-                                Console.WriteLine($"{_endPoint}: Downloading {request.filename}");
-                                MemoryStream memory = new MemoryStream();
-                                if (!Directory.Exists("storage"))
-                                    Directory.CreateDirectory("storage");
-                                if (!File.Exists("storage/" + request.filename))
-                                    File.Create("storage/" + request.filename).Close();
                                 var response = new SecureNoteFileDownloadResponse
                                 {
-                                    file = await File.ReadAllBytesAsync("storage/" + request.filename),
+                                    success = _username != null,
+                                    file = null!,
                                 };
+                                if (response.success)
+                                {
+                                    Console.WriteLine($"{_endPoint} as {_username}: Downloading {request.filename}");
+                                    string path = "storage/" + _username + "/";
+                                    if (!Directory.Exists(path))
+                                        Directory.CreateDirectory(path);
+                                    if (!File.Exists(path + request.filename))
+                                        File.Create(path + request.filename).Close();
+                                    response.file = await File.ReadAllBytesAsync(path + request.filename);
+                                }
                                 using (var ms = new MemoryStream())
                                 {
                                     Serializer.SerializeWithLengthPrefix(ms, response, PrefixStyle.Fixed32);
@@ -177,14 +234,17 @@ namespace SecureNote
                                 }
                                 break;
                             }
-                        case SecureNoteActions.FileUpload: // Upload
+                        case SecureNoteActions.FileUpload:
                             {
                                 await _stream.ReadAsync(emptyByteArray, 0, 0);
                                 var request = Serializer.DeserializeWithLengthPrefix<SecureNoteFileUploadRequest>(_stream, PrefixStyle.Fixed32);
-                                Console.WriteLine($"{_endPoint}: Uploading {request.filename}");
-                                if (!Directory.Exists("storage"))
-                                    Directory.CreateDirectory("storage");
-                                File.WriteAllBytes("storage/" + request.filename, request.file);
+                                if (_username == null)
+                                    break;
+                                string path = "storage/" + _username + "/";
+                                Console.WriteLine($"{_endPoint} as {_username}: Uploading {request.filename}");
+                                if (!Directory.Exists(path))
+                                    Directory.CreateDirectory(path);
+                                File.WriteAllBytes(path + request.filename, request.file);
                                 break;
                             }
                         //case "snfr": // Rename
@@ -197,12 +257,12 @@ namespace SecureNote
                         //    }
                     }
                 }
-                Console.WriteLine($"Клиент {_endPoint} отключился.");
+                Console.WriteLine($"Client {_endPoint} as {_username} disconnected.");
                 _stream.Close();
             }
             catch (IOException)
             {
-                Console.WriteLine($"Подключение к {_endPoint} закрыто сервером.");
+                Console.WriteLine($"Connection {_endPoint} as {_username} closed by server.");
             }
             catch (Exception ex)
             {

@@ -133,6 +133,8 @@ namespace SecureNote
                 { "help", HelpFunc },
                 { "server" , ServerFunc },
                 { "connect" , ConnectFunc },
+                { "signup" , SignUpFunc },
+                { "signin" , SignInFunc },
                 { "download" , DownloadFunc },
                 { "upload" , UploadFunc },
                 { "list" , ListFunc },
@@ -188,6 +190,25 @@ namespace SecureNote
             }
             _rsa ??= RSA.Create();
             _client = new SecureNoteClient(address, port, _rsa);
+        }
+
+        public static void SignUpFunc(string[] args)
+        {
+            if (args.Length < 2)
+            {
+                Console.WriteLine("not enough args!");
+                return;
+            }
+            Console.WriteLine("Sign Up result: {0}", _client.SignUp(args[0], args[1]).GetAwaiter().GetResult());
+        }
+        public static void SignInFunc(string[] args)
+        {
+            if (args.Length < 2)
+            {
+                Console.WriteLine("not enough args!");
+                return;
+            }
+            Console.WriteLine("Sign In result: {0}", _client.SignIn(args[0], args[1]).GetAwaiter().GetResult());
         }
 
         public static void DownloadFunc(string[] args)
