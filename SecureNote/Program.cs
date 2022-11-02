@@ -8,98 +8,8 @@ namespace SecureNote
 {
     public static class Program
     {
-        //public static async Task Main(string[] args)
-        //{
-        //    //RSA rsa = RSA.Create();
-        //    //Console.WriteLine(Convert.ToBase64String(rsa.ExportRSAPublicKey()));
-        //    //Console.WriteLine();
-        //    ////Console.WriteLine(Convert.ToBase64String(rsa.ExportRSAPrivateKey()));
-        //    ////Console.WriteLine();
-        //    //RSA rsa2 = RSA.Create();
-        //    //Console.WriteLine(Convert.ToBase64String(rsa2.ExportRSAPublicKey()));
-        //    //Console.WriteLine();
-        //    //Console.WriteLine(Convert.ToBase64String(rsa2.ExportRSAPrivateKey()));
-        //    //Console.WriteLine();
-        //    //rsa2.ImportRSAPublicKey(rsa.ExportRSAPublicKey(), out int _);
-        //    //Console.WriteLine(Convert.ToBase64String(rsa2.ExportRSAPublicKey()));
-        //    //Console.WriteLine();
-        //    //Console.WriteLine(Convert.ToBase64String(rsa2.ExportRSAPrivateKey()));
-        //    //Console.WriteLine();
-        //    ////Console.WriteLine(Convert.ToBase64String(rsa.ExportRSAPrivateKey()));
-        //    //return;
-        //    //Aes aes = Aes.Create();
-        //    //aes.Padding = PaddingMode.None;
-        //    //aes.Key = Convert.FromHexString("0000000000000000000000000000000000000000000000000000000000000000");
-        //    //aes.IV = Convert.FromHexString("00000000000000000000000000000000");
-        //    //Aes aes2 = Aes.Create();
-        //    //aes2.Padding = PaddingMode.None;
-        //    //aes2.Key = aes.Key;
-        //    //aes2.IV = aes.IV;
-        //    //CryptoStream crypto1 = new CryptoStream(new ZeroStream(), aes.CreateEncryptor(), CryptoStreamMode.Read);
-        //    //CryptoStream crypto2 = new CryptoStream(new ZeroStream(), aes2.CreateEncryptor(), CryptoStreamMode.Read);
-        //    //byte[] buffer = new byte[16];
-        //    //crypto1.Read(buffer, 0, 16);
-        //    //Console.WriteLine(Convert.ToHexString(buffer));
-        //    //crypto2.Read(buffer, 0, 16);
-        //    //Console.WriteLine(Convert.ToHexString(buffer));
-        //    //return;
-        //    Console.Write("Server (Y/n): ");
-        //    if (Console.ReadLine()?.ToLower()[0] == 'y')
-        //    {
-        //        await new SecureNoteServer("127.0.0.1", 8888).ListenAsync();
-        //    }
-        //    else
-        //    {
-        //        RSA rsa = RSA.Create();
-        //        var client = new SecureNoteClient("127.0.0.1", 8888, rsa);
-        //        //client.OnMessage += (string x) => Console.WriteLine("Got: {0}", x);
-        //        //byte[] buffer = new byte[4];
-        //        //BinaryPrimitives.WriteInt32LittleEndian(buffer, 1234);
-        //        //Thread.Sleep(5000);
-        //        await client.DownloadFile("test.txt");
-        //        Console.WriteLine("Press key to upload...");
-        //        Console.ReadKey(true);
-        //        await client.UploadFile("test.txt");
-        //    }
-        //    Console.WriteLine("Press key to exit...");
-        //    Console.ReadKey(true);
-        //}
-
-        //private enum TmpActions : uint
-        //{
-        //    none = 0,
-        //    help = 14,
-        //    test = 15,
-        //    good,
-        //}
         public static void Main(string[] args)
         {
-            //using (var ms = new MemoryStream())
-            //{
-            //    SecureNoteFileListResponse data = new();
-            //    data.files = new string[] { "hello", "world" };
-            //    //Serializer.Serialize(ms, data);
-            //    //Serializer.Serialize(ms, data);
-            //    Serializer.SerializeWithLengthPrefix(ms, data, PrefixStyle.Fixed32);
-            //    Serializer.SerializeWithLengthPrefix(ms, data, PrefixStyle.Fixed32);
-            //    //ms.WriteByte(8);
-            //    //ms.WriteByte(143);
-            //    //ms.WriteByte(78);
-            //    ms.Position = 0;
-            //    //var result = Serializer.Deserialize<SecureNoteFileListData>(ms);
-            //    var result1 = Serializer.DeserializeWithLengthPrefix<SecureNoteFileListResponse>(ms, PrefixStyle.Fixed32);
-            //    var result = Serializer.DeserializeWithLengthPrefix<SecureNoteFileListResponse>(ms, PrefixStyle.Fixed32);
-            //    foreach (var file in result.files)
-            //        Console.WriteLine(file);
-            //    byte[] bytes = ms.ToArray();
-            //    foreach (var b in bytes)
-            //        Console.Write($"{b} ");
-            //}
-            //return;
-            //FileInfo exceptionsFile = new FileInfo("log.txt");
-            //TextWriter exceptionWriter = new StreamWriter(exceptionsFile.FullName);
-            //Console.SetError(exceptionWriter);
-
             Console.WriteLine("Welcome to SecureNote. Type in a command.");
 
             while (true)
@@ -138,8 +48,7 @@ namespace SecureNote
                 { "download" , DownloadFunc },
                 { "upload" , UploadFunc },
                 { "list" , ListFunc },
-                //{ "genrsa" , GenRsaFunc },
-                //{ "loadrsa" , LoadRsaFunc },
+                { "password" , PasswordFunc },
             };
         private static Dictionary<string, string> commandMan =
             new Dictionary<string, string>()
@@ -150,14 +59,13 @@ namespace SecureNote
                 { "download" , "download file by name from server (filename)" },
                 { "upload" , "upload file by name to server (filename)" },
                 { "list" , "get file list" },
-                //{ "genrsa" , "generate and save rsa public/private key" },
-                //{ "loadrsa" , "load rsa from save" },
+                { "password" , "set file encrypt password" },
             };
 
         private static void ServerFunc(string[] obj)
         {
             if (obj.Length == 0)
-                obj = new string[] { "127.0.0.1", "8888" };
+                obj = new string[] { "127.0.0.1", "18888" };
             if (obj.Length != 2)
             {
                 Console.WriteLine("Wrong param count: address port");
@@ -175,7 +83,7 @@ namespace SecureNote
         private static void ConnectFunc(string[] obj)
         {
             if (obj.Length == 0)
-                obj = new string[] { "127.0.0.1", "8888" };
+                obj = new string[] { "127.0.0.1", "18888" };
             if (obj.Length != 2)
             {
                 Console.WriteLine("Wrong param count: address port");
@@ -209,6 +117,19 @@ namespace SecureNote
             Console.WriteLine("Sign In result: {0}", _client.SignIn(args[0], args[1]).GetAwaiter().GetResult());
         }
 
+        public static void PasswordFunc(string[] args)
+        {
+            if (args.Length == 0)
+            {
+                _client.SetEncryptPassword(null);
+                Console.WriteLine("Encrypt password removed");
+            }
+            else
+            {
+                _client.SetEncryptPassword(String.Join(' ', args));
+                Console.WriteLine("Encrypt password changed");
+            }
+        }
         public static void DownloadFunc(string[] args)
         {
             if (args.Length == 0)

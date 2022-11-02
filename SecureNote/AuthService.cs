@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using System.Text.Json;
+using System.Security.Cryptography;
 
 namespace SecureNote
 {
@@ -30,13 +31,13 @@ namespace SecureNote
         }
         public bool CheckUser(string username, string password)
         {
-            return userPasswords.TryGetValue(username, out string pass) && password == pass;
+            return userPasswords.TryGetValue(username, out string? pass) && Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(password))) == pass;
         }
         public bool CreateUser(string username, string password)
         {
             if (userPasswords.ContainsKey(username) || username.Length < 3 || password.Length < 3)
                 return false;
-            userPasswords[username] = password;
+            userPasswords[username] = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(password)));
             Save();
             return true;
         }

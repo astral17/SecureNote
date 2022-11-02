@@ -12,6 +12,7 @@ namespace SecureNote
         private readonly TcpClient _client;
         private readonly SecureStream _stream;
         //private readonly Task _task;
+        private string? _password = null;
         public SecureNoteClient(string address, int port)
         {
             _client = new TcpClient(address, port);
@@ -79,6 +80,10 @@ namespace SecureNote
             response.files ??= new string[0];
             return response.files;
         }
+        public void SetEncryptPassword(string? password)
+        {
+            _password = password;
+        }
         public async Task DownloadFile(string filename)
         {
             var request = new SecureNoteFileDownloadRequest
@@ -92,6 +97,8 @@ namespace SecureNote
             var response = Serializer.DeserializeWithLengthPrefix<SecureNoteFileDownloadResponse>(_stream, PrefixStyle.Fixed32);
             if (!Directory.Exists("workspace"))
                 Directory.CreateDirectory("workspace");
+            if (_password != null)
+                response.file = Utils.DecryptBytes(response.file, _password);
             File.WriteAllBytes("workspace/" + filename, response.file);
         }
         public async Task UploadFile(string filename)
@@ -101,6 +108,8 @@ namespace SecureNote
                 filename = filename,
                 file = await File.ReadAllBytesAsync("workspace/" + filename),
             };
+            if (_password != null)
+                request.file = Utils.EncryptBytes(request.file, _password);
             Serializer.SerializeWithLengthPrefix(_stream, SecureNoteActions.FileUpload, PrefixStyle.Fixed32);
             Serializer.SerializeWithLengthPrefix(_stream, request, PrefixStyle.Fixed32);
         }
