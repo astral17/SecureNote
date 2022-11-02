@@ -49,6 +49,7 @@ namespace SecureNote
                 { "upload" , UploadFunc },
                 { "list" , ListFunc },
                 { "password" , PasswordFunc },
+                { "mitm" , MitmFunc },
             };
         private static Dictionary<string, string> commandMan =
             new Dictionary<string, string>()
@@ -60,6 +61,7 @@ namespace SecureNote
                 { "upload" , "upload file by name to server (filename)" },
                 { "list" , "get file list" },
                 { "password" , "set file encrypt password" },
+                { "mitm" , "man in the middle (mitmAddress) (mitmPort) (serverAddress) (serverPort)" },
             };
 
         private static void ServerFunc(string[] obj)
@@ -163,6 +165,26 @@ namespace SecureNote
         {
             foreach (var kv in commandMan)
                 Console.WriteLine(kv.Key + " - " + kv.Value);
+        }
+
+        public static void MitmFunc(string[] args)
+        {
+            if (args.Length == 0)
+                args = new string[] { "127.0.0.1", "16666", "127.0.0.1", "18888" };
+            if (args.Length != 4)
+            {
+                Console.WriteLine("Wrong param count: mitmAddress mitmPort serverAddress serverPort");
+                return;
+            }
+            string mitmAddress = args[0];
+            string serverAddress = args[2];
+            if (!int.TryParse(args[1], out int mitmPort) || !int.TryParse(args[3], out int serverPort))
+            {
+                Console.WriteLine("port should be a number!");
+                return;
+            }
+            new MiddleManServer(mitmAddress, mitmPort, serverAddress, serverPort)
+                .ListenAsync().GetAwaiter().GetResult();
         }
     }
 }
